@@ -1,24 +1,41 @@
 #pragma once
 
-
+#include <EEPROM.h>
 #include <Adafruit_MCP23X08.h>
 #include <Adafruit_MCP23X17.h>
+
 
 static Adafruit_MCP23X17 mcp;
 
 #include <EncButton.h>
 VirtEncoder enc[8];
+const VirtEncoder *LeftEnc[3] = {&enc[6], &enc[1], &enc[7]};
+const VirtEncoder *RightEnc[3] = {&enc[2], &enc[4], &enc[0]};
+
+int old[8]{0};
+
+int *leftOld[3] = {&old[6], &old[1], &old[7]};
+int *rightOld[3] = {&old[2], &old[4], &old[0]};
 
 #define INT_PIN 12
 
+#define NORM_ON 30  // время горения светодиода
+#define NORM_OFF 3000 // время потушенного светодиода
+
+static uint16_t onLed = NORM_ON;
+static uint16_t offLed = NORM_OFF;
+
+bool savePattern = false;
 
 struct konechnost{
 	uint8_t top;
 	uint8_t hand;
 	uint8_t arm;
-	set(uint8_t a, uint8_t b, uint8_t c)
+	void set(const VirtEncoder **enc)
 	{
-		top = a; hand = b; arm = c;
+		top = enc[0]->counter; 
+		hand = enc[1]->counter;
+		arm = enc[2]->counter;
 	}
 };
 
@@ -62,6 +79,7 @@ void digitalWriteFast(uint8_t pin, bool x) {
   } else if (pin < 20) {
     bitWrite(PORTC, (pin - 14), x);    // Set pin to HIGH / LOW
   }
+  return;
 }
 
 
@@ -107,19 +125,24 @@ char GetKey4x4()
 bool doubleSwitch = 0;
 
 
+
 void switchDoubleFunction(int port)
 {
-//  if (analogRead(A1))
-{
-  if (analogRead(port))
+	// если выскокий уровень на пине
+    if (analogRead(port))
     {
+    // если до этого тумблер был выключен
       if (doubleSwitch == 0)
       {
         delay(5);
+		// условие антидребезга
         if (analogRead(port))
         {
-          doubleSwitch = 1;
-          Serial.println("SwitchON");
+          doubleSwitch = 1;  // тумблер считается включенным
+//          Serial.println("SwitchON");
+		  onLed = 100;
+		  offLed = 100;
+		  savePattern = true;
         }
       }
     }
@@ -131,11 +154,13 @@ void switchDoubleFunction(int port)
         if (!analogRead(port))
         {
           doubleSwitch = 0;
-          Serial.println("SwitchOFF");
+ //         Serial.println("SwitchOFF");
+		  onLed = NORM_ON;
+		  offLed = NORM_OFF;
+		  savePattern = false;
         }
       }
     }
-  }
 }
 
 byte pin;
@@ -187,11 +212,21 @@ void blink(uint8_t led, uint16_t on, uint16_t off)
 	}
 }
 
+bool isLeft(uint8_t ch)
+{
+	return (ch=='4'||ch=='5'||ch=='7'||ch=='8'||ch=='*'||ch=='0');
+	
+}
+
+bool isRight(uint8_t ch)
+{
+	return (ch=='6'||ch=='B'||ch=='9'||ch=='C'||ch=='#'||ch=='D');
+}
 
 void myPattern(uint8_t num, konechnost &arm)
 {
 	// для левой руки
-	if(num=='4'||num=='5'||num=='7'||num=='8'||num=='*'||num=='0')
+	if(isLeft(num))
 	{
 	    String outPut = "";
         enc[6].counter = arm.top;
@@ -204,7 +239,7 @@ void myPattern(uint8_t num, konechnost &arm)
         outPut = "B" + String(enc[7].counter) + ":";
         Serial.print(outPut);
 	}
-	else if(num=='6'||num=='B'||num=='9'||num=='C'||num=='#'||num=='D')
+	else if(isRight(num))
 	{
 	    String outPut = "";
         enc[2].counter = arm.top;
@@ -218,3 +253,48 @@ void myPattern(uint8_t num, konechnost &arm)
         Serial.print(outPut);
 	}
 }
+
+konechnost readEEPROM(const uint8_t addr)
+{
+	uint16_t newAddr = addr*3;
+	konechnost arm;
+    if(newAddr > EEPROM.length())
+	{
+		Serial.println("EEPROM overflow");
+		return arm;
+	}
+	arm.top = EEPROM.read(newAddr);
+	delay(5);
+	arm.hand = EEPROM.read(newAddr+1);
+	delay(5);
+    arm.arm = EEPROM.read(newAddr+2);
+    delay(5);  	
+	return arm;
+}
+
+void writeEEPROM(const konechnost &arm, const uint8_t addr)
+{
+	uint16_t newAddr = addr * 3;
+  	EEPROM.write(newAddr,     arm.top);
+	delay(5);
+  	EEPROM.write(newAddr + 1, arm.hand);
+	delay(5);
+  	EEPROM.write(newAddr + 2, arm.arm);
+	delay(5);
+	return;
+}
+
+void selectPattern(konechnost side, const uint8_t choise)
+{
+    if(savePattern)
+	{
+        if(isLeft(choise)) side.set(LeftEnc);
+        else if(isRight(choise)) side.set(RightEnc);
+		writeEEPROM(side, choise);
+	}else{
+	  side = readEEPROM(choise);
+//	      left.set(45,90,45);
+      myPattern(choise, side);
+	}
+}
+ 

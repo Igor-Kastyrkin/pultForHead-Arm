@@ -33,9 +33,6 @@
 
 #include "Button.h"
 
-#define NORM_ON 30  // время горения светодиода
-#define NORM_OFF 3000 // время потушенного светодиода
-
 
 
 //button rec(A1, pinType::analog);
@@ -86,6 +83,8 @@ void setup() {
   enc[1].setEncReverse(true);
   enc[2].setEncReverse(true);
   enc[7].setEncReverse(true);
+  
+//  VirtEncoder left1[3] = {enc[1], enc[2], enc[7]};
 
 
   Serial.println(".");
@@ -93,17 +92,14 @@ void setup() {
 
 
 
-int old[16] = {0};
+//int old[16] = {0};
 
 int moveSpeed = 8;
 
 void loop() {
-
-  //  switchDoubleFunction(A2); // для двух рук?
-  static unsigned long mil1 = 0; // для проверки скорости
+  switchDoubleFunction(A2); // для двух рук?
+//  static unsigned long mil1 = 0; // для проверки скорости
   static unsigned long mil2 = 0; // для не частой передачи данных по bluetooth
-  static uint16_t onLed = NORM_ON;
-  static uint16_t offLed = NORM_OFF;
   static bool recMode = 0;
   // опрос расширителя порта
   readMCU();
@@ -124,6 +120,9 @@ void loop() {
 
       if (old[i] != enc[i].counter)
       {
+//		String 		s = (String)"enc[" + (String)(int)i + (String)"] = " + (String)enc[i].counter;
+
+//	    Serial.println(s);
         /*    Serial.print(micros() - mil1);
               Serial.print('\t');
               Serial.print(pin / 2);
@@ -133,6 +132,8 @@ void loop() {
         //      if (enc[i].counter < 0)
         //        enc[i].counter = 0;
         enc[i].counter += (enc[i].counter - old[i]) * moveSpeed;
+	//	s = (String)"enc[" + (String)(int)i + (String)"] = " + (String)enc[i].counter;
+   // 	Serial.println(s);
         String output = "";
         switch (i)
         {
@@ -143,6 +144,7 @@ void loop() {
             //          Serial.print("D");  // правое предплечье
             Serial.print(output);
             break;
+
           case 1:
             //          Serial.print("A");  // левое плечо
             if (enc[i].counter < 0) enc[i].counter = 0;
@@ -150,6 +152,7 @@ void loop() {
             output = "A" + String(enc[i].counter) + ":";
             Serial.print(output);
             break;
+
           case 2:
             //          Serial.print("E");  // левая рука вращение
             if (enc[i].counter < 0 - 35)  enc[i].counter = 0 - 35;
@@ -157,6 +160,7 @@ void loop() {
             output = "E" + String(enc[i].counter + 35) + ":";
             Serial.print(output);
             break;
+
           case 3:
             //          Serial.print("H");  // голова по горизонтали
 			if(enc[i].counter > 90) enc[i].counter = 90; 
@@ -164,6 +168,7 @@ void loop() {
             output = "H" + String(enc[i].counter) + ":";
             Serial.print(output);
             break;
+
           case 4:
             //          Serial.print("C");  // правое плечо
             if (enc[i].counter < 0) enc[i].counter = 0;
@@ -171,6 +176,7 @@ void loop() {
             output = "C" + String(enc[i].counter) + ":";
             Serial.print(output);
             break;
+
           case 5:
             //          Serial.print("V"); // голова по вертикали
 			if(enc[i].counter > 90) enc[i].counter = 90; 
@@ -178,6 +184,7 @@ void loop() {
             output = "V" + String(enc[i].counter) + ":";
             Serial.print(output);
             break;
+
           case 6:
             //          Serial.print("E");  // правая рука вращение
             if (enc[i].counter < 0 - 35) enc[i].counter = 0 - 35;
@@ -185,6 +192,7 @@ void loop() {
             output = "F" + String(enc[i].counter + 35) + ":";
             Serial.print(output);
             break;
+
           case 7:
             //          Serial.print("B");  // левое плечо
             if (enc[i].counter < 0) enc[i].counter = 0;
@@ -251,15 +259,29 @@ void loop() {
         break;
 
       case '4':  // left arm1
-	    left.set(45,90,45);
-	    myPattern(a, left);
-		old[6] = enc[6].counter;
-		old[1] = enc[1].counter;
-		old[7] = enc[7].counter;
+      case '5':
+	  case '7':
+	  case '8':
+	  case '*':
+	  case '0':
+        selectPattern(left, a);
+		// чтобы слишком часто в цикле не опрашивать в след раз
+		for(int i = 0; i<3;i++) *leftOld[i] = LeftEnc[i]->counter;
+//		old[6] = enc[6].counter;
+//		old[1] = enc[1].counter;
+//		old[7] = enc[7].counter;
         break;
+		
+	  case '6':
+	  case 'B':
+	  case '9':
+	  case 'C':
+	  case '#':
+	  case 'D':
+        selectPattern(right, a);
+		for(int i = 0; i<3;i++) *rightOld[i] = RightEnc[i]->counter;
+	    break;
     }
-
-    //    Serial.print(a);
   }
 
   if (rec.clicked())
@@ -280,7 +302,7 @@ void loop() {
   }
   if (play.clicked()) Serial.print("P:"); //play
 
-  mil1 = micros();
+//  mil1 = micros();
 
   blink(LED, onLed, offLed);
 }
